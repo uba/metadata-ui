@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BDC Metadata Builder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <div class="eyebrow">BIG / Brazil Data Cube</div>
+      <h1>Metadata Builder</h1>
+      <p>Construtor assistido de metadados de coleções para o catálogo STAC.</p>
+    </div>
+    <div class="header-actions">
+      <label class="button secondary" for="json-file">Importar JSON</label>
+      <input id="json-file" type="file" accept="application/json,.json" hidden>
+      <button id="reset-button" class="button secondary" type="button">Novo</button>
+      <button id="download-button" class="button primary" type="button">Baixar JSON</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="editor-panel">
+      <div id="validation-summary" class="validation-summary" hidden></div>
+
+      <details class="form-section" open>
+        <summary>
+          <span>1. Identificação</span>
+          <small>Informações básicas da coleção</small>
+        </summary>
+        <div class="section-body grid two-cols">
+          <label class="field">
+            <span>Nome <b>*</b> <code>name</code></span>
+            <input id="name" type="text" placeholder="ex.: sentinel-2-l2a" autocomplete="off">
+            <small>Nome curto, sem espaços.</small>
+          </label>
+
+          <label class="field">
+            <span>Versão <b>*</b> <code>version</code></span>
+            <input id="version" type="text" value="1" autocomplete="off">
+          </label>
+
+          <label class="field full">
+            <span>Título <b>*</b> <code>title</code></span>
+            <input id="title" type="text" placeholder="Título descritivo da coleção">
+          </label>
+
+          <label class="field full">
+            <span>Descrição <b>*</b> <code>description</code></span>
+            <textarea id="description" rows="5" placeholder="Descreva o conjunto de dados, processamento e finalidade."></textarea>
+          </label>
+
+          <label class="field">
+            <span>Tipo <b>*</b> <code>collection_type</code></span>
+            <select id="collection-type">
+              <option value="collection">Collection</option>
+              <option value="cube">Data Cube</option>
+              <option value="mosaic">Mosaic</option>
+              <option value="classification">Classification</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Categoria <b>*</b> <code>category</code></span>
+            <select id="category">
+              <option value="eo">EO</option>
+              <option value="sar">SAR</option>
+              <option value="lidar">LiDAR</option>
+              <option value="unknown">Unknown</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Versão anterior <code>version_predecessor</code></span>
+            <input id="version-predecessor" type="number" step="1" placeholder="null">
+          </label>
+
+          <label class="field">
+            <span>Versão seguinte <code>version_successor</code></span>
+            <input id="version-successor" type="number" step="1" placeholder="null">
+          </label>
+
+          <label class="switch-field">
+            <input id="is-public" type="checkbox" checked>
+            <span>Disponível publicamente <code>is_public</code></span>
+          </label>
+
+          <label class="switch-field">
+            <input id="is-available" type="checkbox">
+            <span>Coleção disponível <code>is_available</code></span>
+          </label>
+        </div>
+      </details>
+
+      <details id="composition-section" class="form-section">
+        <summary>
+          <span>2. Composição e grade</span>
+          <small>Campos específicos de cubos e mosaicos</small>
+        </summary>
+        <div class="section-body grid two-cols">
+          <label class="field">
+            <span>Grade de referência <code>grid_ref_sys</code></span>
+            <input id="grid-ref-sys" type="text" placeholder="ex.: BDC_SM_V2">
+          </label>
+
+          <label class="field">
+            <span>Função de composição <code>composition_function</code></span>
+            <select id="composition-function">
+              <option value="">null</option>
+              <option>Identity</option>
+              <option>Least CC First</option>
+              <option>Median</option>
+            </select>
+          </label>
+
+          <div class="subsection full">
+            <h3>Composição temporal <code>temporal_composition_schema</code></h3>
+            <div class="grid three-cols">
+              <label class="field">
+                <span>Passo</span>
+                <input id="temporal-step" type="number" min="1" step="1" placeholder="16">
+              </label>
+              <label class="field">
+                <span>Unidade</span>
+                <select id="temporal-unit">
+                  <option value="">—</option>
+                  <option value="day">day</option>
+                  <option value="month">month</option>
+                  <option value="year">year</option>
+                  <option value="hour">hour</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Schema</span>
+                <input id="temporal-schema" type="text" placeholder="cyclic">
+              </label>
+              <label class="field">
+                <span>Passo do ciclo</span>
+                <input id="cycle-step" type="number" min="1" step="1" placeholder="1">
+              </label>
+              <label class="field">
+                <span>Unidade do ciclo</span>
+                <select id="cycle-unit">
+                  <option value="">—</option>
+                  <option value="day">day</option>
+                  <option value="month">month</option>
+                  <option value="year">year</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="form-section">
+        <summary>
+          <span>3. Cobertura espacial</span>
+          <small>Bounding box opcional</small>
+        </summary>
+        <div class="section-body">
+          <div class="grid four-cols">
+            <label class="field"><span>West</span><input id="bbox-west" type="number" step="any" placeholder="-180"></label>
+            <label class="field"><span>South</span><input id="bbox-south" type="number" step="any" placeholder="-90"></label>
+            <label class="field"><span>East</span><input id="bbox-east" type="number" step="any" placeholder="180"></label>
+            <label class="field"><span>North</span><input id="bbox-north" type="number" step="any" placeholder="90"></label>
+          </div>
+        </div>
+      </details>
+
+      <details class="form-section" open>
+        <summary>
+          <span>4. Provedores e licença</span>
+          <small><code>metadata.providers</code> e <code>metadata.license</code></small>
+        </summary>
+        <div class="section-body">
+          <div class="section-toolbar">
+            <h3>Provedores</h3>
+            <button class="button small" id="add-provider" type="button">+ Provedor</button>
+          </div>
+          <div id="providers-list" class="repeater-list"></div>
+
+          <div class="subsection">
+            <h3>Licença</h3>
+            <div class="grid two-cols">
+              <label class="field"><span>Tipo <code>license.type</code></span><input id="license-type" type="text" placeholder="Public Domain"></label>
+              <label class="field"><span>URI <code>license.uri</code></span><input id="license-uri" type="url" placeholder="https://..."></label>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="form-section" open>
+        <summary>
+          <span>5. Palavras-chave</span>
+          <small><code>keywords</code></small>
+        </summary>
+        <div class="section-body">
+          <div class="inline-add">
+            <input id="keyword-input" type="text" placeholder="Digite uma palavra-chave e pressione Enter">
+            <button id="add-keyword" class="button small" type="button">+ Adicionar</button>
+          </div>
+          <div id="keywords-list" class="chips"></div>
+        </div>
+      </details>
+
+      <details class="form-section" open>
+        <summary>
+          <span>6. Bandas</span>
+          <small><code>bands</code></small>
+        </summary>
+        <div class="section-body">
+          <div class="section-toolbar">
+            <p class="hint">Adicione uma entrada para cada banda ou variável armazenada.</p>
+            <button class="button small" id="add-band" type="button">+ Banda</button>
+          </div>
+          <div id="bands-list" class="repeater-list"></div>
+        </div>
+      </details>
+
+      <details class="form-section">
+        <summary>
+          <span>7. Summaries</span>
+          <small>Plataformas, constelações, instrumentos e parâmetros</small>
+        </summary>
+        <div class="section-body grid two-cols">
+          <div class="tag-editor" data-summary="platform">
+            <label>Platform <code>summaries.platform</code></label>
+            <div class="inline-add"><input placeholder="sentinel-2a"><button class="button small add-summary" type="button">+</button></div>
+            <div class="chips summary-values"></div>
+          </div>
+          <div class="tag-editor" data-summary="constellation">
+            <label>Constellation <code>summaries.constellation</code></label>
+            <div class="inline-add"><input placeholder="sentinel-2"><button class="button small add-summary" type="button">+</button></div>
+            <div class="chips summary-values"></div>
+          </div>
+          <div class="tag-editor" data-summary="instruments">
+            <label>Instruments <code>summaries.instruments</code></label>
+            <div class="inline-add"><input placeholder="msi"><button class="button small add-summary" type="button">+</button></div>
+            <div class="chips summary-values"></div>
+          </div>
+          <div class="tag-editor" data-summary="gsd" data-type="number">
+            <label>GSD <code>summaries.gsd</code></label>
+            <div class="inline-add"><input type="number" step="any" placeholder="10"><button class="button small add-summary" type="button">+</button></div>
+            <div class="chips summary-values"></div>
+          </div>
+          <div class="tag-editor" data-summary="view:off_nadir" data-type="number">
+            <label>Off nadir <code>summaries.view:off_nadir</code></label>
+            <div class="inline-add"><input type="number" step="any" placeholder="0"><button class="button small add-summary" type="button">+</button></div>
+            <div class="chips summary-values"></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="form-section" open>
+        <summary>
+          <span>8. Assets</span>
+          <small><code>item_assets</code></small>
+        </summary>
+        <div class="section-body">
+          <div class="section-toolbar">
+            <p class="hint">A chave do asset normalmente corresponde ao nome da banda.</p>
+            <button class="button small" id="add-asset" type="button">+ Asset</button>
+          </div>
+          <div id="assets-list" class="repeater-list"></div>
+        </div>
+      </details>
+
+      <details class="form-section">
+        <summary>
+          <span>9. Quicklook e propriedades</span>
+          <small>Campos opcionais e avançados</small>
+        </summary>
+        <div class="section-body">
+          <div class="subsection">
+            <h3>Quicklook</h3>
+            <div class="tag-editor" data-summary="__quicklook">
+              <div class="inline-add"><input placeholder="B04"><button class="button small add-summary" type="button">+</button></div>
+              <div class="chips summary-values"></div>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <div class="section-toolbar">
+              <h3>Fontes <code>properties.sources</code></h3>
+              <button class="button small" id="add-source" type="button">+ Fonte</button>
+            </div>
+            <div id="sources-list" class="simple-list"></div>
+          </div>
+
+          <div class="subsection">
+            <h3>Aplicações BDC <code>properties["bdc:applications"]</code></h3>
+            <div class="tag-editor" data-summary="__applications">
+              <div class="inline-add"><input placeholder="BDCExplorer"><button class="button small add-summary" type="button">+</button></div>
+              <div class="chips summary-values"></div>
+            </div>
+          </div>
+
+          <label class="field">
+            <span>Propriedades adicionais (JSON) <code>properties</code></span>
+            <textarea id="extra-properties" rows="9" class="code-input" placeholder='{"bdc:visual": {...}, "renders": {...}}'></textarea>
+            <small>Objeto opcional. As chaves aqui são combinadas com <code>sources</code> e <code>bdc:applications</code>.</small>
+          </label>
+        </div>
+      </details>
+    </section>
+
+    <aside class="preview-panel">
+      <div class="preview-header">
+        <div>
+          <strong>JSON gerado</strong>
+          <span id="json-status" class="status ok">válido</span>
+        </div>
+        <button id="copy-button" class="button small secondary" type="button">Copiar</button>
+      </div>
+      <pre id="json-preview" aria-live="polite"></pre>
+    </aside>
+  </main>
+
+  <template id="provider-template">
+    <article class="repeater-card provider-card">
+      <div class="card-header"><strong>Provedor</strong><button class="icon-button remove-item" type="button" title="Remover">−</button></div>
+      <div class="grid two-cols">
+        <label class="field"><span>Nome <b>*</b></span><input data-key="name" type="text"></label>
+        <label class="field"><span>URL</span><input data-key="url" type="url" placeholder="https://..."></label>
+        <label class="field full"><span>Descrição</span><input data-key="description" type="text"></label>
+        <div class="field full">
+          <span>Roles <b>*</b></span>
+          <div class="checkbox-row roles">
+            <label><input type="checkbox" value="licensor"> licensor</label>
+            <label><input type="checkbox" value="producer"> producer</label>
+            <label><input type="checkbox" value="processor"> processor</label>
+            <label><input type="checkbox" value="host"> host</label>
+          </div>
+        </div>
+      </div>
+      <details class="nested-details">
+        <summary>Processing metadata</summary>
+        <div class="grid two-cols nested-body">
+          <label class="field full"><span>Lineage</span><input data-key="processing:lineage" type="text"></label>
+          <label class="field"><span>Level</span><input data-key="processing:level" type="text" placeholder="L2A"></label>
+          <label class="field"><span>Facility</span><input data-key="processing:facility" type="text" placeholder="BDC/BIG"></label>
+          <label class="field"><span>Software</span><input data-key="processing:software:name" type="text" placeholder="bdc-cube-builder"></label>
+          <label class="field"><span>Versão do software</span><input data-key="processing:software:version" type="text" placeholder="1.0"></label>
+        </div>
+      </details>
+    </article>
+  </template>
+
+  <template id="band-template">
+    <article class="repeater-card band-card">
+      <div class="card-header"><strong>Banda</strong><button class="icon-button remove-item" type="button" title="Remover">−</button></div>
+      <div class="grid three-cols">
+        <label class="field"><span>Nome <b>*</b></span><input data-key="name" type="text" placeholder="B04"></label>
+        <label class="field"><span>Common name <b>*</b></span><input data-key="common_name" type="text" placeholder="red"></label>
+        <label class="field"><span>Data type <b>*</b></span><select data-key="data_type" class="data-type-select"></select></label>
+        <label class="field full"><span>Descrição</span><input data-key="description" type="text"></label>
+        <label class="field"><span>Min</span><input data-key="min_value" type="number" step="any"></label>
+        <label class="field"><span>Max</span><input data-key="max_value" type="number" step="any"></label>
+        <label class="field"><span>NoData</span><input data-key="nodata" type="number" step="any"></label>
+        <label class="field"><span>Scale</span><input data-key="scale" type="number" step="any"></label>
+        <label class="field"><span>Offset / scale_add</span><input data-key="offset" type="number" step="any"></label>
+        <label class="field full"><span>MIME type <b>*</b></span><select data-key="mime_type" class="mime-type-select"></select></label>
+        <label class="field"><span>Resolução X</span><input data-key="resolution_x" type="number" step="any"></label>
+        <label class="field"><span>Resolução Y</span><input data-key="resolution_y" type="number" step="any"></label>
+        <label class="field"><span>Unidade</span><select data-key="resolution_unit"><option value="">null</option><option>Meter</option><option>Kilometer</option></select></label>
+        <label class="field"><span>Center wavelength</span><input data-key="center_wavelength" type="number" step="any"></label>
+        <label class="field"><span>Full width half max</span><input data-key="full_width_half_max" type="number" step="any"></label>
+      </div>
+    </article>
+  </template>
+
+  <template id="asset-template">
+    <article class="repeater-card asset-card">
+      <div class="card-header"><strong>Asset</strong><button class="icon-button remove-item" type="button" title="Remover">−</button></div>
+      <div class="grid two-cols">
+        <label class="field"><span>Chave <b>*</b></span><input data-key="key" type="text" placeholder="B04"></label>
+        <label class="field"><span>Título <b>*</b></span><input data-key="title" type="text"></label>
+        <label class="field full"><span>MIME type <b>*</b></span><select data-key="type" class="mime-type-select"></select></label>
+        <label class="field full"><span>Descrição</span><input data-key="description" type="text"></label>
+        <div class="field full">
+          <span>Roles <b>*</b></span>
+          <div class="checkbox-row roles">
+            <label><input type="checkbox" value="thumbnail"> thumbnail</label>
+            <label><input type="checkbox" value="overview"> overview</label>
+            <label><input type="checkbox" value="data"> data</label>
+            <label><input type="checkbox" value="metadata"> metadata</label>
+          </div>
+        </div>
+        <div class="thumbnail-bands full" hidden>
+          <div class="hint">Mapeamento RGB opcional do thumbnail</div>
+          <div class="grid three-cols">
+            <label class="field"><span>Red</span><input data-key="bands:red" type="text"></label>
+            <label class="field"><span>Green</span><input data-key="bands:green" type="text"></label>
+            <label class="field"><span>Blue</span><input data-key="bands:blue" type="text"></label>
+          </div>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
