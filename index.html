@@ -3,20 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BDC Metadata Builder</title>
+  <title>metadata-ui</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="app-header">
     <div>
-      <div class="eyebrow">BIG / Brazil Data Cube</div>
-      <h1>Metadata Builder</h1>
+      <div class="eyebrow">BIG / Brazil Data Cube · protótipo</div>
+      <h1>metadata-ui</h1>
       <p>Construtor assistido de metadados de coleções para o catálogo STAC.</p>
+      <div id="draft-status" class="draft-status" aria-live="polite">Rascunho local</div>
     </div>
     <div class="header-actions">
+      <button id="reset-button" class="button secondary" type="button">Novo</button>
       <label class="button secondary" for="json-file">Importar JSON</label>
       <input id="json-file" type="file" accept="application/json,.json" hidden>
-      <button id="reset-button" class="button secondary" type="button">Novo</button>
+      <button id="share-button" class="button secondary" type="button">Compartilhar</button>
       <button id="download-button" class="button primary" type="button">Baixar JSON</button>
     </div>
   </header>
@@ -39,7 +41,7 @@
 
           <label class="field">
             <span>Versão <b>*</b> <code>version</code></span>
-            <input id="version" type="text" value="1" autocomplete="off">
+            <input id="version" type="number" min="1" step="1" value="1" autocomplete="off">
           </label>
 
           <label class="field full">
@@ -361,6 +363,7 @@
         <label class="field"><span>NoData</span><input data-key="nodata" type="number" step="any"></label>
         <label class="field"><span>Scale</span><input data-key="scale" type="number" step="any"></label>
         <label class="field"><span>Offset / scale_add</span><input data-key="offset" type="number" step="any"></label>
+        <label class="field"><span>Unidade do dado</span><input data-key="unit" type="text"></label>
         <label class="field full"><span>MIME type <b>*</b></span><select data-key="mime_type" class="mime-type-select"></select></label>
         <label class="field"><span>Resolução X</span><input data-key="resolution_x" type="number" step="any"></label>
         <label class="field"><span>Resolução Y</span><input data-key="resolution_y" type="number" step="any"></label>
@@ -399,6 +402,35 @@
       </div>
     </article>
   </template>
+
+
+  <dialog id="share-dialog" class="share-dialog">
+    <form method="dialog" class="share-card">
+      <div class="share-header">
+        <div>
+          <div class="eyebrow">Compartilhamento</div>
+          <h2>Link do formulário</h2>
+        </div>
+        <button class="dialog-close" value="close" type="submit" aria-label="Fechar">×</button>
+      </div>
+      <p>O link contém uma cópia do estado atual do formulário. Quem recebê-lo poderá abrir, editar e gerar um novo link.</p>
+      <label class="field">
+        <span>URL compartilhável</span>
+        <textarea id="share-url" class="code-input share-url" rows="5" readonly></textarea>
+      </label>
+      <div class="share-meta">
+        <span id="share-size"></span>
+        <span id="share-warning" class="share-warning" hidden>Link longo: alguns aplicativos podem truncá-lo.</span>
+      </div>
+      <div class="share-actions">
+        <button id="copy-share-button" class="button primary" type="button">Copiar link</button>
+        <button class="button secondary" value="close" type="submit">Fechar</button>
+      </div>
+      <p class="privacy-note">O conteúdo após <code>#</code> permanece no navegador e não é enviado ao servidor do GitHub Pages durante a requisição HTTP.</p>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="app.js"></script>
 </body>

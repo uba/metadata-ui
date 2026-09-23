@@ -19,6 +19,13 @@ const MIME_TYPES = [
   'application/netcdf'
 ];
 
+const STORAGE_KEY = 'metadata-ui-draft-v1';
+const SHARE_VERSION = '1';
+const SHARE_WARNING_LENGTH = 8000;
+let isHydrating = false;
+let saveTimer = null;
+let toastTimer = null;
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
@@ -31,8 +38,185 @@ const dom = {
   assets: $('#assets-list'),
   keywords: $('#keywords-list'),
   sources: $('#sources-list'),
-  compositionSection: $('#composition-section')
+  compositionSection: $('#composition-section'),
+  draftStatus: $('#draft-status'),
+  shareDialog: $('#share-dialog'),
+  shareUrl: $('#share-url'),
+  shareSize: $('#share-size'),
+  shareWarning: $('#share-warning'),
+  toast: $('#toast')
 };
+
+function showToast(message, timeout = 2200) {
+  if (!dom.toast) return;
+  clearTimeout(toastTimer);
+  dom.toast.textContent = message;
+  dom.toast.hidden = false;
+  requestAnimationFrame(() => dom.toast.classList.add('visible'));
+  toastTimer = setTimeout(() => {
+    dom.toast.classList.remove('visible');
+    setTimeout(() => { dom.toast.hidden = true; }, 180);
+  }, timeout);
+}
+
+function updateDraftStatus(message) {
+  if (dom.draftStatus) dom.draftStatus.textContent = message;
+}
+
+function saveDraftNow(output) {
+  if (isHydrating) return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: SHARE_VERSION,
+      saved_at: new Date().toISOString(),
+      data: output
+    }));
+    updateDraftStatus('Rascunho salvo neste navegador');
+  } catch (error) {
+    console.warn('Não foi possível salvar o rascunho local.', error);
+    updateDraftStatus('Rascunho local indisponível');
+  }
+}
+
+function scheduleDraftSave(output) {
+  if (isHydrating) return;
+  clearTimeout(saveTimer);
+  updateDraftStatus('Salvando rascunho…');
+  saveTimer = setTimeout(() => saveDraftNow(output), 350);
+}
+
+function readDraft() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed?.data && typeof parsed.data === 'object' ? parsed.data : parsed;
+  } catch (error) {
+    console.warn('Rascunho local inválido.', error);
+    return null;
+  }
+}
+
+function clearDraft() {
+  clearTimeout(saveTimer);
+  try { localStorage.removeItem(STORAGE_KEY); } catch (error) { console.warn(error); }
+}
+
+function clearShareHash() {
+  if (!window.location.hash) return;
+  history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function base64UrlToBytes(value) {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function encodeSharePayload(metadata) {
+  const source = new TextEncoder().encode(JSON.stringify(metadata));
+
+  if ('CompressionStream' in window) {
+    const stream = new Blob([source]).stream().pipeThrough(new CompressionStream('gzip'));
+    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+    return { codec: 'gzip', data: bytesToBase64Url(compressed) };
+  }
+
+  return { codec: 'plain', data: bytesToBase64Url(source) };
+}
+
+async function decodeSharePayload(codec, data) {
+  const bytes = base64UrlToBytes(data);
+  let decodedBytes = bytes;
+
+  if (codec === 'gzip') {
+    if (!('DecompressionStream' in window)) {
+      throw new Error('Este navegador não oferece suporte à descompressão do link compartilhado.');
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    decodedBytes = new Uint8Array(await new Response(stream).arrayBuffer());
+  } else if (codec !== 'plain') {
+    throw new Error(`Codec de compartilhamento desconhecido: ${codec}`);
+  }
+
+  return JSON.parse(new TextDecoder().decode(decodedBytes));
+}
+
+function getSharedStateFromHash() {
+  if (!window.location.hash || window.location.hash.length < 2) return null;
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const data = params.get('data');
+  if (!data) return null;
+  return {
+    version: params.get('v') || '1',
+    codec: params.get('c') || 'plain',
+    data
+  };
+}
+
+async function createShareLink() {
+  const { output } = updatePreview({ persist: false });
+  const payload = await encodeSharePayload(output);
+  const base = window.location.href.split('#')[0].split('?')[0];
+  const params = new URLSearchParams({
+    v: SHARE_VERSION,
+    c: payload.codec,
+    data: payload.data
+  });
+  const url = `${base}#${params.toString()}`;
+
+  dom.shareUrl.value = url;
+  dom.shareSize.textContent = `${url.length.toLocaleString('pt-BR')} caracteres`;
+  dom.shareWarning.hidden = url.length <= SHARE_WARNING_LENGTH;
+
+  if (typeof dom.shareDialog.showModal === 'function') {
+    dom.shareDialog.showModal();
+  } else {
+    await copyText(url);
+    showToast('Link copiado.');
+  }
+}
+
+async function copyText(value) {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch {
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand('copy');
+    area.remove();
+  }
+}
+
+async function copyShareLink() {
+  const value = dom.shareUrl.value;
+  if (!value) return;
+  await copyText(value);
+  const button = $('#copy-share-button');
+  const original = button.textContent;
+  button.textContent = 'Copiado';
+  showToast('Link copiado para a área de transferência.');
+  setTimeout(() => { button.textContent = original; }, 1200);
+}
 
 function text(id) {
   return document.getElementById(id).value.trim();
@@ -366,7 +550,7 @@ function buildMetadata(errors = []) {
     is_public: $('#is-public').checked,
     is_available: $('#is-available').checked,
     category: text('category'),
-    version: text('version'),
+    version: intOrNull('version'),
     version_predecessor: intOrNull('version-predecessor'),
     version_successor: intOrNull('version-successor')
   };
@@ -431,7 +615,7 @@ function validate(output, extraErrors = []) {
   return errors;
 }
 
-function updatePreview() {
+function updatePreview({ persist = true } = {}) {
   const errors = [];
   const output = buildMetadata(errors);
   const validationErrors = validate(output, errors);
@@ -450,6 +634,7 @@ function updatePreview() {
   }
 
   dom.compositionSection.hidden = !['cube', 'mosaic'].includes(output.collection_type);
+  if (persist) scheduleDraftSave(output);
   return { output, validationErrors };
 }
 
@@ -475,54 +660,63 @@ function setValue(id, value) {
   element.value = value ?? '';
 }
 
-function loadJson(data) {
-  resetForm(false);
-  setValue('name', data.name);
-  setValue('title', data.title);
-  setValue('description', data.description);
-  setValue('version', data.version ?? 1);
-  setValue('collection-type', data.collection_type || 'collection');
-  setValue('category', data.category || 'eo');
-  setValue('version-predecessor', data.version_predecessor);
-  setValue('version-successor', data.version_successor);
-  $('#is-public').checked = data.is_public ?? true;
-  $('#is-available').checked = data.is_available ?? false;
+function loadJson(data, { persist = true, statusText = null } = {}) {
+  const previousHydrationState = isHydrating;
+  isHydrating = true;
+  try {
+    resetForm(false);
+    setValue('name', data.name);
+    setValue('title', data.title);
+    setValue('description', data.description);
+    setValue('version', data.version ?? 1);
+    setValue('collection-type', data.collection_type || 'collection');
+    setValue('category', data.category || 'eo');
+    setValue('version-predecessor', data.version_predecessor);
+    setValue('version-successor', data.version_successor);
+    $('#is-public').checked = data.is_public ?? true;
+    $('#is-available').checked = data.is_available ?? false;
 
-  setValue('grid-ref-sys', data.grid_ref_sys);
-  setValue('composition-function', data.composition_function);
-  const temporal = data.temporal_composition_schema || {};
-  setValue('temporal-step', temporal.step);
-  setValue('temporal-unit', temporal.unit);
-  setValue('temporal-schema', temporal.schema);
-  setValue('cycle-step', temporal.cycle?.step);
-  setValue('cycle-unit', temporal.cycle?.unit);
+    setValue('grid-ref-sys', data.grid_ref_sys);
+    setValue('composition-function', data.composition_function);
+    const temporal = data.temporal_composition_schema || {};
+    setValue('temporal-step', temporal.step);
+    setValue('temporal-unit', temporal.unit);
+    setValue('temporal-schema', temporal.schema);
+    setValue('cycle-step', temporal.cycle?.step);
+    setValue('cycle-unit', temporal.cycle?.unit);
 
-  const bbox = data.extent?.spatial?.bbox?.[0];
-  if (Array.isArray(bbox) && bbox.length >= 4) {
-    ['bbox-west', 'bbox-south', 'bbox-east', 'bbox-north'].forEach((id, index) => setValue(id, bbox[index]));
+    const bbox = data.extent?.spatial?.bbox?.[0];
+    if (Array.isArray(bbox) && bbox.length >= 4) {
+      ['bbox-west', 'bbox-south', 'bbox-east', 'bbox-north'].forEach((id, index) => setValue(id, bbox[index]));
+    }
+
+    (data.metadata?.providers || []).forEach(addProvider);
+    setValue('license-type', data.metadata?.license?.type);
+    setValue('license-uri', data.metadata?.license?.uri);
+    (data.keywords || []).forEach(addKeyword);
+    (data.bands || []).forEach(addBand);
+
+    Object.entries(data.summaries || {}).forEach(([key, values]) => setSummary(key, Array.isArray(values) ? values : [values]));
+    Object.entries(data.item_assets || {}).forEach(([key, asset]) => addAsset(key, asset));
+    setSummary('__quicklook', data.quicklook || []);
+
+    (data.properties?.sources || []).forEach(addSource);
+    setSummary('__applications', data.properties?.['bdc:applications'] || []);
+    const extraProperties = { ...(data.properties || {}) };
+    delete extraProperties.sources;
+    delete extraProperties['bdc:applications'];
+    setValue('extra-properties', Object.keys(extraProperties).length ? JSON.stringify(extraProperties, null, 2) : '');
+
+    if (!dom.providers.children.length) addProvider();
+    if (!dom.bands.children.length) addBand();
+    if (!dom.assets.children.length) addAsset();
+  } finally {
+    isHydrating = previousHydrationState;
   }
 
-  (data.metadata?.providers || []).forEach(addProvider);
-  setValue('license-type', data.metadata?.license?.type);
-  setValue('license-uri', data.metadata?.license?.uri);
-  (data.keywords || []).forEach(addKeyword);
-  (data.bands || []).forEach(addBand);
-
-  Object.entries(data.summaries || {}).forEach(([key, values]) => setSummary(key, Array.isArray(values) ? values : [values]));
-  Object.entries(data.item_assets || {}).forEach(([key, asset]) => addAsset(key, asset));
-  setSummary('__quicklook', data.quicklook || []);
-
-  (data.properties?.sources || []).forEach(addSource);
-  setSummary('__applications', data.properties?.['bdc:applications'] || []);
-  const extraProperties = { ...(data.properties || {}) };
-  delete extraProperties.sources;
-  delete extraProperties['bdc:applications'];
-  setValue('extra-properties', Object.keys(extraProperties).length ? JSON.stringify(extraProperties, null, 2) : '');
-
-  if (!dom.providers.children.length) addProvider();
-  if (!dom.bands.children.length) addBand();
-  if (!dom.assets.children.length) addAsset();
-  updatePreview();
+  const result = updatePreview({ persist });
+  if (statusText) updateDraftStatus(statusText);
+  return result;
 }
 
 function resetForm(withDefaults = true) {
@@ -572,21 +766,38 @@ function downloadJson() {
 }
 
 async function copyJson() {
-  const json = dom.preview.textContent;
-  try {
-    await navigator.clipboard.writeText(json);
-    $('#copy-button').textContent = 'Copiado';
-  } catch {
-    const area = document.createElement('textarea');
-    area.value = json;
-    document.body.appendChild(area);
-    area.select();
-    document.execCommand('copy');
-    area.remove();
-    $('#copy-button').textContent = 'Copiado';
-  }
-  setTimeout(() => $('#copy-button').textContent = 'Copiar', 1200);
+  await copyText(dom.preview.textContent);
+  const button = $('#copy-button');
+  button.textContent = 'Copiado';
+  showToast('JSON copiado para a área de transferência.');
+  setTimeout(() => { button.textContent = 'Copiar'; }, 1200);
 }
+
+function newDocument() {
+  const previousHydrationState = isHydrating;
+  isHydrating = true;
+  try {
+    resetForm(true);
+  } finally {
+    isHydrating = previousHydrationState;
+  }
+  clearDraft();
+  clearShareHash();
+  updatePreview({ persist: false });
+  updateDraftStatus('Novo formulário');
+  showToast('Novo formulário criado.');
+}
+
+async function loadSharedState(shared) {
+  if (shared.version !== SHARE_VERSION) {
+    console.warn(`Versão de compartilhamento ${shared.version}; versão atual ${SHARE_VERSION}.`);
+  }
+  const data = await decodeSharePayload(shared.codec, shared.data);
+  clearShareHash();
+  loadJson(data, { persist: true, statusText: 'Carregado de link compartilhado · salvando rascunho local' });
+  showToast('Formulário carregado do link compartilhado.');
+}
+
 
 function wireEvents() {
   document.addEventListener('input', event => {
@@ -614,14 +825,18 @@ function wireEvents() {
 
   $('#download-button').addEventListener('click', downloadJson);
   $('#copy-button').addEventListener('click', copyJson);
-  $('#reset-button').addEventListener('click', () => resetForm(true));
+  $('#share-button').addEventListener('click', createShareLink);
+  $('#copy-share-button').addEventListener('click', copyShareLink);
+  $('#reset-button').addEventListener('click', newDocument);
 
   $('#json-file').addEventListener('change', async event => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      loadJson(data);
+      clearShareHash();
+      loadJson(data, { persist: true, statusText: 'JSON importado · rascunho salvo localmente' });
+      showToast('JSON importado com sucesso.');
     } catch (error) {
       alert(`Não foi possível carregar o JSON: ${error.message}`);
     } finally {
@@ -630,5 +845,36 @@ function wireEvents() {
   });
 }
 
-wireEvents();
-resetForm(true);
+async function boot() {
+  wireEvents();
+
+  const shared = getSharedStateFromHash();
+  if (shared) {
+    try {
+      await loadSharedState(shared);
+      return;
+    } catch (error) {
+      console.error(error);
+      showToast(`Não foi possível abrir o link: ${error.message}`, 4200);
+    }
+  }
+
+  const draft = readDraft();
+  if (draft) {
+    loadJson(draft, { persist: false, statusText: 'Rascunho restaurado deste navegador' });
+    showToast('Rascunho local restaurado.');
+    return;
+  }
+
+  const previousHydrationState = isHydrating;
+  isHydrating = true;
+  try {
+    resetForm(true);
+  } finally {
+    isHydrating = previousHydrationState;
+  }
+  updatePreview({ persist: false });
+  updateDraftStatus('Novo formulário');
+}
+
+boot();

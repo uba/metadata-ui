@@ -197,3 +197,107 @@ input.invalid, select.invalid, textarea.invalid { border-color: var(--danger); b
   .form-section > summary { align-items: flex-start; }
   .form-section > summary small { display: none; }
 }
+
+
+/* Draft / sharing */
+.draft-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: .75rem;
+  font-weight: 620;
+}
+.draft-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7b8794;
+}
+
+.share-dialog {
+  width: min(720px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgba(17, 24, 39, .28);
+  color: var(--text);
+}
+.share-dialog::backdrop {
+  background: rgba(16, 24, 40, .48);
+  backdrop-filter: blur(2px);
+}
+.share-card { padding: 22px; }
+.share-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 10px;
+}
+.share-header h2 { margin: 2px 0 0; font-size: 1.25rem; }
+.share-card > p { color: var(--muted); font-size: .88rem; line-height: 1.55; }
+.dialog-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.65rem;
+  line-height: 1;
+  padding: 0 4px;
+}
+.dialog-close:hover { color: var(--text); }
+.share-url {
+  min-height: 116px;
+  word-break: break-all;
+  resize: none;
+}
+.share-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: .76rem;
+}
+.share-warning { color: var(--warning); font-weight: 680; }
+.share-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+.privacy-note {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: .76rem !important;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 100;
+  transform: translate(-50%, 10px);
+  opacity: 0;
+  max-width: min(540px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #17212b;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(16, 24, 40, .24);
+  font-size: .84rem;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+@media (max-width: 720px) {
+  .share-card { padding: 18px; }
+  .share-meta, .share-actions { flex-direction: column; align-items: stretch; }
+  .share-actions .button { width: 100%; }
+}
